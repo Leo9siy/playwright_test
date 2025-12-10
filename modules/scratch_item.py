@@ -1,74 +1,89 @@
-import time
-
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, Page
 
 
-def getItem():
+def search_tag(page: Page, block: str, name: str):
+    elements = page.locator(
+        f"xpath={block}"
+    ).all()
+
+    for el in elements:
+        for inner in el.locator("xpath=./div/div").all():
+            element1 = inner.locator("xpath=.//span").first
+            element2 = inner.locator("xpath=.//span[position() = 2]").first
+
+            if element1.text_content(timeout=1000).strip().find(name) != -1:
+
+                if element2.locator("xpath=.//a").text_content(timeout=1000):
+                    return element2.locator("xpath=.//a").text_content()
+                return element2.text_content()
+    return None
+
+def collect_characteristics(page: Page, block: str):
+    characteristics = {}
+
+    for element in page.locator(block).all():
+        element1 = element.locator("xpath=.//div/div/span").first
+        element2 = element.locator("xpath=.//div/div/span[position()=2]").first
+
+        characteristics[element1.text_content(timeout=1000).strip()] \
+            = element2.text_content(timeout=1000).strip()
+    return characteristics
+
+def getItem(url: str):
     with sync_playwright() as p:
         try:
-
             browser = p.chromium.launch(
                 headless=False
-            )  # Если headless=True, браузер не будет отображаться
+            )  # If headless=True, browser ll not show
             page = browser.new_page()
 
-            page.goto("https://brain.com.ua/", wait_until="load")
 
-            page.locator("input.quick-search-input").all()[1].fill(
-                "Apple iPhone 15 128GB Black"
-            )
-            page.locator("input[type=submit].qsr-submit").click()
-            page.locator("div.br-pp-desc.br-pp-ipd-hidden > a").all()[0].click()
+            page.goto(url, wait_until="load")
 
-            title = page.locator("h1.main-title").text_content()
+            try:
+                page.locator("xpath=//input[@class='quick-search-input']").all()[1].fill(
+                    "Apple iPhone 15 128GB Black"
+                )
+            except Exception as e:
+                print(e)
 
-            colour = page.locator(
-                "div.series-item.series-color.current.active > a > ul > li > div"
-            ).get_attribute("style")
+            page.locator("//*[contains(@class, 'search-form')][contains(@class, 'header-search-form')]"
+              "/form/input[position()=2]").all()[1].click()
 
-            memory = page.locator(
-                "div.br-pr-chr-item:nth-of-type(4) > div > div > span > a"
-            ).text_content()
+            page.locator("xpath=//div[@class='br-pp-imadds']/div/a").all()[0].click()
 
-            price = page.locator(
-                "div.br-pr-price.main-price-block > div > div > span"
-            ).text_content()
+            title = page.locator("xpath=//*[@id='br-pr-1']/h1").text_content().strip()
 
-            action_price = page.locator("div.price-wrapper > span.red-price")
-            action_price = action_price.text_content() if action_price else None
+            colour = search_tag(page, "//div[@class='br-pr-chr-item']", "Колір")
+            memory = search_tag(page, "//div[@class='br-pr-chr-item']", "Вбудована")
 
-            photos = page.locator(".slick-track > div > img > img").all()
+            price = page.locator("xpath=//div[@class='price-wrapper']/span").first.text_content().strip()
+
+            try:
+                action_price = page.locator("xpath=//span[@class='red-price']").text_content(timeout=1000)
+            except Exception:
+                action_price = None
+
+            photos = page.locator("xpath=//*[@class='slick-track']/div/img").all()
+
             links = [photo.get_attribute("src") for photo in photos]
 
-            code = page.locator("span.br-pr-code-val").all()
-            if code:
-                code = code[0].text_content()
+            try:
+                code = page.locator("xpath=//span[@class='br-pr-code-val']").first.text_content(timeout=1000)
+            except Exception:
+                code = None
 
-            reviews_count = page.locator(
-                "a[href='#reviews-list'].scroll-to-element"
-            ).all()
-            if reviews_count:
-                reviews_count = reviews_count[0].text_content()
+            try:
+                reviews_count = page.locator(
+                    "xpath=//a[@href='#reviews-list' and @class='scroll-to-element']/span"
+                ).first.text_content(timeout=1000)
+            except Exception:
+                reviews_count = None
 
-            screen_size = page.locator(
-                "div.br-pr-chr-item:nth-child(2) > div > div:nth-child(2) > span:nth-child(2) > a"
-            )
-            if screen_size:
-                screen_size = screen_size.text_content()
+            screen_size = search_tag(page, "//div[@class='br-pr-chr-item']", "Діагональ екрану")
+            screen_power = search_tag(page, "//div[@class='br-pr-chr-item']", "Роздільна здатність екрану")
 
-            screen_power = page.locator(
-                "div:nth-child(2) > div > div:nth-child(3) > span:nth-child(2) > a"
-            )
-            if screen_power:
-                screen_power = screen_power.text_content()
-
-            chars = {}
-
-            blocks = page.locator("div.br-pr-chr-item").all()
-            for block in blocks:
-                chars[block.locator("div > div > span:first-of-type")] = block.locator(
-                    "div > div > span:nth-of-type(2) > a"
-                ).text_content()
+            chars = collect_characteristics(page, "//div[@class='br-pr-chr-item']")
 
             page.close()
 
@@ -78,12 +93,13 @@ def getItem():
                 "memory": memory,
                 "price": price,
                 "action_price": action_price,
-                "links": links,
+                "photo_links": links,
                 "code": code,
                 "reviews_count": reviews_count,
                 "screen_size": screen_size,
                 "screen_power": screen_power,
-                "chars": chars,
+                "characteristics": chars,
             }
+
         except Exception as e:
             print(e)

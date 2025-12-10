@@ -1,18 +1,13 @@
 from pprint import pprint
 
+from modules.scratch_item import getItem
+from play.models import Characteristic, Photo, Item
+
 
 def save_to_db():
-    dict_ = get_item("https://brain.com.ua/ukr/")
+    dict_ = getItem("https://brain.com.ua/")
 
     pprint(dict_)
-
-    characteristics = []
-    for char, value in dict_["characteristics"].items():
-        character = Characteristic(name=char, value=value)
-        characteristics.append(character)
-        character.save()
-
-    del dict_["characteristics"]
 
     item = Item(
         title=dict_["title"],
@@ -26,12 +21,15 @@ def save_to_db():
         screen_power=dict_["screen_power"],
     )
     item.save()
-    item.characteristics.set(characteristics)
 
+    characteristics = []
+    for char, value in dict_["characteristics"].items():
+        character = Characteristic(name=char, value=value, item=item)
+        characteristics.append(character)
+        character.save()
 
     photos = []
     for link in dict_["photo_links"]:
         photo = Photo(link=link, item=item)
         photos.append(photo)
         photo.save()
-    del dict_["photo_links"]
